@@ -133,14 +133,17 @@ namespace Bvw {
 
 				this.video_window_allocation.width = (int) width;
 				this.video_window_allocation.height = (int) height;
-				this.video_window_allocation.x = (int) (allocation.width - width) / 2;
-				this.video_window_allocation.y =(int) (allocation.height - height) / 2;
-				this.video_window.move_resize ((int) (allocation.width - width) / 2,
-											   (int) (allocation.height - height) / 2,
-											   (int) width, (int) height);
+				this.video_window_allocation.x =
+				(int) (allocation.width - width) / 2;
+				this.video_window_allocation.y =
+				(int) (allocation.height - height) / 2;
+				this.video_window.move_resize
+				((int) (allocation.width - width) / 2,
+				 (int) (allocation.height - height) / 2,
+				 (int) width, (int) height);
 				this.queue_draw ();
-      }
-    }
+			}
+		}
 
 		private bool configure_event (Gtk.Widget widget,
 									  Gdk.EventConfigure event) {
