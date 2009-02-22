@@ -145,8 +145,8 @@ namespace Bvw {
 			}
 		}
 
-		private bool configure_event (Gtk.Widget widget,
-									  Gdk.EventConfigure event) {
+		private new bool configure_event (Gtk.Widget widget,
+										  Gdk.EventConfigure event) {
 			// @todo
 			this.player.x_overlay_expose ();
 			return false;
