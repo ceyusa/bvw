@@ -1,14 +1,17 @@
 AC_INIT([bvw], [0.1.0], [vjaquez@igalia.com])
 
 AC_CONFIG_SRCDIR([libbvw/bvw-widget.vala])
-AC_CONFIG_HEADERS(config.h)
+AC_CONFIG_HEADERS([config.h])
 AM_INIT_AUTOMAKE([foreign dist-bzip2 no-dist-gzip])
+AC_CONFIG_MACRO_DIR([m4])
 AM_MAINTAINER_MODE
 
 AC_PROG_CC
 AC_PROG_LIBTOOL
 
-AC_PATH_PROG(VALAC, valac, no)
+SHAVE_INIT([m4])
+
+AC_PATH_PROG(VALAC, [valac], [no])
 if test "x$VALA" == "xno"; then
    AC_MSG_ERROR([Cannot find the "valac" compiler in your PATH])
 fi
@@ -37,6 +40,8 @@ PKG_CHECK_MODULES([GTK], [
 	gthread-2.0])
 
 AC_CONFIG_FILES([
+	m4/shave
+	m4/shave-libtool
 	Makefile
 	libbvw/Makefile
 	test/Makefile
