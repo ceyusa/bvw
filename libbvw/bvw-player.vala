@@ -53,6 +53,23 @@ namespace Bvw {
 		NUM_QUALITIES
 	}
 
+	public enum AudioOutType {
+		STEREO,
+		CHANNEL4,
+		CHANNEL41,
+		CHANNEL5,
+		CHANNEL51,
+		AC3PASSTHRU
+	}
+
+	public enum AspectRatio {
+		AUTO = 0,
+		SQUARE = 1,
+		FOURBYTHREE = 2,
+		ANAMORPHIC = 3,
+		DVB = 4
+	}
+
 	public const int SMALL_STREAM_WIDTH = 200;
 	public const int SMALL_STREAM_HEIGHT = 120;
 
