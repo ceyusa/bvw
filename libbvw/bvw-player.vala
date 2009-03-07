@@ -1,6 +1,6 @@
 /* bvw-player.vala
  *
- * Copyright (C) 2008 Víctor Jáquez
+ * Copyright (C) 2008 Víctor Jáquez <vjaquez@igalia.com>
  *
  * License Header
  *
