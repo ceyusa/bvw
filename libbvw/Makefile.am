@@ -38,6 +38,7 @@ valac_common = 				\
 	--pkg gstreamer-0.10		\
 	--pkg gstreamer-interfaces-0.10	\
 	--pkg gstreamer-pbutils-0.10	\
+	--pkg gstreamer-audio-0.10	\
 	--basedir $(top_srcdir)		\
 	$(NULL)
 
