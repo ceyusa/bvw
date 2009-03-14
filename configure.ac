@@ -9,7 +9,7 @@ AM_MAINTAINER_MODE
 AC_PROG_CC
 AC_PROG_LIBTOOL
 
-SHAVE_INIT([m4])
+SHAVE_INIT([m4], [enable])
 
 AC_PATH_PROG(VALAC, [valac], [no])
 if test "x$VALA" == "xno"; then
