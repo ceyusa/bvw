@@ -1,0 +1,5 @@
+This is an educational port of the Bacon Video Widget[1] to the
+Vala[2] language.
+
+1. http://svn.gnome.org/viewvc/totem/trunk/src/backend/
+2. http://live.gnome.org/Vala
