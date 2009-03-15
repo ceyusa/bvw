@@ -1,6 +1,6 @@
 /* gst-player.vala
  *
- * Copyright (C) 2008 Víctor Jáquez
+ * Copyright (C) 2008 Víctor Jáquez <vjaquez@igalia.com>
  *
  * License Header
  *
@@ -10,30 +10,137 @@ using Gst;
 using GConf;
 
 namespace Bvw {
+	private class MissingPlugins : GLib.Object {
+		public GLib.List<Gst.Message> list = new GLib.List<Gst.Message> ();
+
+		delegate string MsgToStrFunc (Gst.Message msg);
+
+		private string[] get_foo (MsgToStrFunc func) {
+			string[] arr = new string[list.length () + 1];
+			int i = 0;
+
+			foreach (Gst.Message msg in list) {
+				arr[i++] = func (msg);
+			}
+			arr[i] = null;
+			return arr;
+		}
+
+		public string[] get_details () {
+			return get_foo (Gst.missing_plugin_message_get_installer_detail);
+		}
+
+		public string[] get_descriptions () {
+			return get_foo (Gst.missing_plugin_message_get_description);
+		}
+	}
+
 	public class PlayerGst: GLib.Object, Player {
 		private string mrl = null;
-		private bool vis_changed;
 		private bool got_redirect;
 		private Gst.MessageType ignore_messages_mask;
-		private Gst.Element _playbin = null;
+		private Gst.Element _play = null;
 		private Gst.Bus bus;
 		private Gst.DebugCategory logger;
 		private GConf.Client gc;
 
+		// Visual effects
+		private bool vis_changed;
+		private Gst.Element audio_capsfilter;
+
+		// other stuff
+		private bool uses_fakesink = false;
+
+		// for easy codec installation
+		private MissingPlugins missing_plugins = null; // list of Gst.Messages
+		private bool plugin_install_in_progress = false;
+
+		private string media_device = null;
+
+		private int speakersetup;
+
+		private static weak GLib.Thread gui_thread;
+
 		construct {
 			logger.init ("bvw", 0, "Bacon Video Widget");
-			string version = Gst.version_string ();
-			logger.debug ("Initialised %s", version);
+			logger.debug ("Initialised %s", Gst.version_string ());
 			Gst.pb_utils_init ();
 		}
 
 		public PlayerGst (int width, int height, UseType type) throws Error {
+			this.connection_speed = 11;
+
+			this.missing_plugins_blacklist ();
+
+			// gconf setting in backend
+			this.gc = GConf.Client.get_default ();
+			this.gc.notify_add ("/apps/bvw", gconf_notify_cb);
+
+			this.setup_pipeline (width, height, type);
+
+			// audio out, if any
+			try {
+				GConf.Value confvalue = this.gc.get_without_default ("/apps/bvw/audio_output_type");
+				if (type != Bvw.UseType.METADATA && type != Bvw.UseType.CAPTURE) {
+					this.speakersetup = confvalue.get_int ();
+// TODO:					this.set_audio_type (this.speakersetup);
+				} else if (type == Bvw.UseType.METADATA || type == Bvw.UseType.CAPTURE) {
+					this.speakersetup = -1;
+				} else {
+					// don't set up a filter for the speaker setup, anything is fine
+					this.speakersetup = -1;
+// TODO:					this.set_audio_type (Bvw.AudioSound.STEREO);
+				}
+			} finally {
+			}
+
+			// tv/conn (not used yet)
+			try {
+				GConf.Value confvalue = this.gc.get_without_default ("/apps/bvw/connection_speed");
+// TODO:				this.set_connection_speed (confvalue.get_int ());
+			} catch (GLib.Error err) {
+// TODO:				this.set_connection_speed (this.connection_speed);
+			}
+
+			try {
+				GConf.Value confvalue = this.gc.get_without_default ("/apps/bvw/buffer-size");
+				this._play.set ("queue-size", Gst.SECOND * confvalue.get_float ());
+			} finally {
+			}
+
+			try {
+				GConf.Value confvalue = this.gc.get_without_default ("/app/bvw/network-buffer-threshold");
+				this._play.set ("queue-threshold", Gst.SECOND * confvalue.get_float ());
+			} finally {
+			}
+
+			// assume we're always called from te main Gtk+ GUI thread
+			this.gui_thread = GLib.Thread.self ();
+		}
+
+		private void missing_plugins_blacklist () {
+			string[] blacklisted_elements = { "ffdemux_flv" };
+
+			foreach (string element in blacklisted_elements) {
+				Gst.PluginFeature feature =
+				Gst.Registry.get_default ().find_feature
+				(element, typeof (Gst.ElementFactory));
+
+				if (feature != null) {
+					feature.set_rank (Gst.Rank.NONE);
+				}
+			}
+		}
+
+		private void setup_pipeline (int width,
+									 int height,
+									 UseType type) throws Error {
 			Gst.Element audio_sink;
 			Gst.Element video_sink;
 
-			this._playbin = Gst.ElementFactory.make ("playbin2", "play");
+			this._play = Gst.ElementFactory.make ("playbin2", "play");
 
-			if (this._playbin == null) {
+			if (this._play == null) {
 				this.ref_sink ();
 				this = null;
 				throw new Error.PLUGIN_LOAD
@@ -41,12 +148,9 @@ namespace Bvw {
 				 "Please check your GStreamer installation.");
 			}
 
-			this.bus = this._playbin.get_bus ();
+			this.bus = this._play.get_bus ();
 			this.bus.add_signal_watch ();
 			this.bus.message += bus_message_cb;
-
-			this.gc = GConf.Client.get_default ();
-			this.gc.notify_add ("/apps/bvw", gconf_notify_cb);
 
 			if (type == Bvw.UseType.VIDEO || type == Bvw.UseType.AUDIO) {
 				audio_sink = Gst.ElementFactory.make ("gconfaudiosink",
@@ -103,7 +207,7 @@ namespace Bvw {
 					ret = video_sink.set_state (Gst.State.READY);
 					if (ret == Gst.StateChangeReturn.FAILURE) {
 						video_sink.set_state (Gst.State.NULL);
-						video_sink.unref ();
+						video_sink = null;
 
 						// Try again with ximagesink
 						video_sink = Gst.ElementFactory.make ("fakesink",
@@ -115,12 +219,140 @@ namespace Bvw {
 
 							err_msg = this.bus.poll (Gst.MessageType.ERROR, 0);
 							if (err_msg == null) {
-								warning ("Should have gotten an error message, please file a bug.");
-								throw new Error.VIDEO_PLUGIN ("Failed to open video output. It may no be available. Please select another video output in the Multmedia Systems Selector.");
+								warning ("Should have gotten an error message, " +
+										 "please file a bug.");
+								video_sink.set_state (Gst.State.NULL);
+// 								this.ref ();
+// 								this.ref_sink ();
+// 								this = null;
+								throw new
+								Error.VIDEO_PLUGIN ("Failed to open video output. " +
+													"It may no be available. " +
+													"Please select another video " +
+													"output in the Multmedia Systems Selector.");
+							} else {
+								video_sink.set_state (Gst.State.NULL);
+								this.ref ();
+								this.ref_sink ();
+								this = null;
+								throw this.error_from_gst_error (err_msg);
 							}
 						}
+					} else {
+						video_sink.set_state (Gst.State.NULL);
+// 						this.ref ();
+// 						this.ref_sink ();
+// 						this = null;
+						throw new
+						Error.VIDEO_PLUGIN ("Failed to open video output. " +
+											"It may no be available. " +
+											"Please select another video " +
+											"output in the Multmedia Systems Selector.");
 					}
 				}
+			}
+
+			if (audio_sink != null) {
+				// need to set bus explicity as it's not in a bin yet and
+				// we need one to catch error messages
+				Gst.Bus bus = new Gst.Bus ();
+				audio_sink.set_bus (bus);
+
+				// state change NULL => READY should always be synchronous
+				Gst.StateChangeReturn ret = audio_sink.set_state (Gst.State.READY);
+				audio_sink.set_bus (null);
+
+				if (ret == Gst.StateChangeReturn.FAILURE) {
+					// doesn't work, drop this audio sink
+					audio_sink.set_state (Gst.State.NULL);
+					audio_sink = null;
+					if (type != Bvw.UseType.AUDIO)
+						audio_sink = Gst.ElementFactory.make ("fakesink",
+															  "audio-sink");
+					if (audio_sink == null) {
+						Gst.Message err_msg = bus.poll (Gst.MessageType.ERROR, 0);
+						if (err_msg == null) {
+							warning ("Should have gotten an error message, please file a bug.");
+							throw new Error.AUDIO_PLUGIN
+								("Failed to open audio output. You may not have " +
+								 "permission to open the sound device, or the sound " +
+								 "server may not be running. " +
+								 "Please select aonther audio output in the Multimedia " +
+								 "System Selector.");
+						} else if (err_msg != null) {
+							audio_sink.set_state (Gst.State.NULL);
+// 							this.ref ();
+// 							this.ref_sink ();
+// 							this = null;
+						}
+						audio_sink.set_state (Gst.State.NULL);
+						throw this.error_from_gst_error (err_msg);
+					}
+
+					// make fakesink sync to the clock like a real sink
+					audio_sink.set ("sync", true);
+					this.logger.debug ("audio sink doesn't work, using fakesink instead");
+					this.uses_fakesink = true;
+				}
+			} else {
+// 				this.ref ();
+// 				this.ref_sink ();
+// 				this = null;
+				throw new Error.AUDIO_PLUGIN
+					("Could not find the audio output. " +
+					 "You may need to install additional GStreamer plugins, or " +
+					 "select another audio output in the Multimedia Systems " +
+					 "Selector.");
+			}
+
+			// set back to NULL to close device again in order to avoid interrupts
+			// being generated after startup while there's nothing to play yet.
+			audio_sink.set_state (Gst.State.NULL);
+
+			do {
+				this.audio_capsfilter = Gst.ElementFactory.make ("capsfilter",
+																 "audiofilter");
+				Gst.Element bin = new Gst.Bin ("audiosinkbin");
+				(bin as Gst.Bin).add_many (this.audio_capsfilter, audio_sink);
+				this.audio_capsfilter.link_pads ("src", audio_sink, "sink");
+
+				Gst.Pad pad = this.audio_capsfilter.get_pad ("sink");
+				bin.add_pad (new Gst.GhostPad ("sink", pad));
+
+				audio_sink = bin;
+			} while (false);
+
+			// now tell playbin
+			this._play.set ("video-sink", video_sink, null);
+			this._play.set ("audio-sink", audio_sink, null);
+
+			// this.vis_plugins_list = null;
+			this._play.notify["source"] += this.playbin_source_notify_cb;
+			this._play.notify["stream-info"] += this.playbin_stream_info_notify_cb;
+
+			if (type == Bvw.UseType.VIDEO) {
+				Gst.StateChangeReturn ret = video_sink.get_state (null, null, 5 * Gst.SECOND);
+				if (ret != Gst.StateChangeReturn.SUCCESS) {
+					this.logger.warning ("Timeout setting videosink to READY");
+					throw new Error.VIDEO_PLUGIN
+						("Failed to open video output. It may not be available. " +
+						 "Please select another video output in the Multimedia Systems Selector.");
+				}
+
+// TODO:				this.update_interface_implementations ();
+			}
+
+			// we want to catch "prepare-xwindow-id" element messages synchronously
+			this.bus.set_sync_handler (this.bus.sync_signal_handler);
+
+// TODO:			this.bus.sync-message["element"] += this.element_msg_sync;
+
+			if (video_sink is Gst.Bin) {
+				// video sink bins like gconfvideosink might remove their children and
+				// create new ones when set to NULL state, and they are currently set
+				// to NULL state whenever playbin re-creates its internal video bin
+				// (it sets all elements to NULL state befor gst_bin_remove ()ing them)
+// TODO:				this.video_sink.element-added += this.got_new_video_sink_bin_element;
 			}
 		}
 
@@ -189,10 +421,10 @@ namespace Bvw {
 					}
 				}
 
-				// this.play.uri = this.mrl;
+				// this._play.uri = this.mrl;
 			} else {
-				// this.play.uri = this.mrl;
-				// this.play.suburi = subtitle_uri;
+				// this._play.uri = this.mrl;
+				// this._play.suburi = subtitle_uri;
 			}
 
 			return true;
@@ -216,7 +448,7 @@ namespace Bvw {
 		}
 
 		public Gst.Element playbin {
-			get { return this._playbin; }
+			get { return this._play; }
 		}
 
 		public bool seekable { get; set; }
@@ -328,7 +560,7 @@ namespace Bvw {
 			Error err = null;
 			string dbg = null;
 
-			Gst.debug_bin_to_dot_file (this._playbin as Gst.Bin,
+			Gst.debug_bin_to_dot_file (this._play as Gst.Bin,
 									   Gst.DebugGraphDetails.ALL,
 									   "bvw-error");
 
@@ -349,14 +581,131 @@ namespace Bvw {
 		private void gconf_notify_cb (GConf.Client client, uint cnxn_id,
 									  GConf.Entry entry) {
 			if (entry.key == "/apps/bvw/network-buffer-threshold") {
-				this._playbin.set ("queue-threshold",
-								   (uint64) Gst.SECOND * entry.value.get_float (),
+				this._play.set ("queue-threshold",
+								(uint64) Gst.SECOND * entry.value.get_float (),
 								   null);
 			} else if (entry.key == "/apps/bvw/buffer-size") {
-				this._playbin.set ("queue-size",
-								   (uint64) Gst.SECOND * entry.value.get_float (),
+				this._play.set ("queue-size",
+								(uint64) Gst.SECOND * entry.value.get_float (),
 								   null);
 			}
+		}
+
+		private void set_device_on_element (Gst.Element element) {
+			if (((ObjectClass) element.get_type ().class_peek ()).find_property ("device") != null) {
+				this.logger.debug ("Setting device to '%s'", this.media_device);
+				element.set ("device", this.media_device, null);
+			}
+		}
+
+		private void playbin_source_notify_cb (GLib.Object play,
+											   GLib.ParamSpec p) {
+			// CHECKME: do we really need these taglist frees here (tpm)?
+// 			if (this.tagcache != null)
+// 				this.tagcache = null;
+// 			if (this.audiotags != null)
+// 				this.audiotags = null;
+// 			if (this.videotags != null)
+// 				this.videotags = null;
+
+			GLib.Object source = null;
+			play.get ("source", source, null);
+
+			if (source != null) {
+				this.logger.debug ("Got source of type %s", source.get_type ().name ());
+				this.set_device_on_element (source as Gst.Element);
+			}
+		}
+
+		private void playbin_stream_info_notify_cb (GLib.Object obj,
+													GLib.ParamSpec p) {
+			// we're being called from the streaming thread, son don't do
+			// anything here
+			this.logger.log ("stream info changed");
+			Gst.Message msg =
+				new Gst.Message.application (this._play,
+											 new Gst.Structure.empty ("notify-streaminfo"));
+			this._play.post_message (msg);
+		}
+
+		private Error error_from_gst_error (Gst.Message err_msg) {
+ 			string src_typename = null;
+ 			GLib.Error e = null;
+ 			Error ret = null;
+
+ 			if (err_msg.src != null)
+ 				src_typename = err_msg.src.get_type ().name ();
+
+ 			err_msg.parse_error (out e, null);
+
+ 			if ((e.domain == Gst.resource_error_quark ()
+ 				 && e.code == Gst.ResourceError.NOT_FOUND)
+ 				|| (e.domain == Gst.resource_error_quark ()
+ 					&& e.code == Gst.ResourceError.OPEN_READ)) {
+ 				if (e.code == Gst.ResourceError.NOT_FOUND) {
+ 					if (err_msg.src is Gst.BaseAudioSink) {
+ 						ret = new Error.AUDIO_PLUGIN
+ 							("The requested audio output was not found. " +
+ 							 "Please select another audio output in the Multimedia " +
+ 							 "Systems Selector.");
+ 					} else {
+ 						ret = new Error.FILE_NOT_FOUND
+ 							("Location not found.");
+ 					}
+ 				} else {
+ 					ret = new Error.FILE_PERMISSION
+ 						("Could not open location; " +
+ 						 "you might not have permission to open the file.");
+ 				}
+ 			} else if (e.domain == Gst.resource_error_quark ()
+ 					   && e.code == Gst.ResourceError.BUSY) {
+ 				if (err_msg.src is Gst.BaseAudioSink) {
+ 					ret = new Error.AUDIO_BUSY
+ 					("The audio output is in use by another application. " +
+ 					 "Please select another audio output in the Multimedia Systems Selector. " +
+ 					 "You may want to consider using a sound server.");
+ 				} else {
+ 					ret = new Error.VIDEO_PLUGIN
+ 					("The video output is in use by another application. " +
+ 					 "Please close other video applications, or select " +
+ 					 "another video output in the Multimedia Systems Selector.");
+ 				}
+  			} else if (e.domain == Gst.resource_error_quark ()) {
+  				ret =  new Error.FILE_GENERIC (e.message);
+  			} else if ((e.domain == Gst.core_error_quark ()
+  						&& e.code == Gst.CoreError.MISSING_PLUGIN)
+  					   || (e.domain == Gst.stream_error_quark ()
+  						   && e.code == Gst.StreamError.CODEC_NOT_FOUND)) {
+  				if (this.missing_plugins != null) {
+  					// TODO
+  				} else {
+  					this.logger.log ("no missing plugin messages, " +
+  									 "posting generic error");
+  					ret = new Error.CODEC_NOT_HANDLED (e.message);
+  				}
+  			} else if ((e.domain == Gst.stream_error_quark ()
+  						&& e.code == Gst.StreamError.WRONG_TYPE)
+  					   || (e.domain == Gst.stream_error_quark ()
+  						   && e.code == Gst.StreamError.NOT_IMPLEMENTED)) {
+  				if (src_typename != null) {
+  					ret = new Error.CODEC_NOT_HANDLED
+  					("%s: %s,", src_typename, e.message);
+  				} else {
+  					ret = new Error.CODEC_NOT_HANDLED (e.message);
+  				}
+  			} else if ((e.domain == Gst.stream_error_quark ()
+  						&& e.code == Gst.StreamError.FAILED)
+  					   && src_typename == "GstTypeFind") {
+  				ret = new Error.READ_ERROR
+  				("Cannot play this file over the network. " +
+  				 "Try downloading it to disk first.");
+  			} else {
+  				// generic error, no code; take message
+  				ret = new Error.GENERIC (e.message);
+ 			}
+
+ 			this.missing_plugins = null;
+			return ret;
 		}
 	}
 }

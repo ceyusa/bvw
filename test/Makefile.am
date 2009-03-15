@@ -23,13 +23,12 @@ test_SOURCES = 				\
 	$(test_VALASOURCES:.vala=.h)	\
 	$(NULL)
 
-valac_common =			\
-	--quiet			\
-	--ccode			\
-	--vapidir ../libbvw	\
-	--pkg libbvw-1.0	\
-	--pkg gtk+-2.0		\
-	--pkg gstreamer-0.10	\
+valac_common =				\
+	--quiet				\
+	--ccode				\
+	--vapidir ../libbvw		\
+	--pkg libbvw-1.0		\
+	--pkg gtk+-2.0			\
 	$(NULL)
 
 test.vala.stamp: $(test_VALASOURCES)

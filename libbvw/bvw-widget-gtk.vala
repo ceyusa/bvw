@@ -1,6 +1,6 @@
 /* bvw-widget-gtk.vala
  *
- * Copyright (C) 2008 Víctor Jáquez
+ * Copyright (C) 2008 Víctor Jáquez <vjaquez@igalia.com>
  *
  * License Header
  *
@@ -248,7 +248,7 @@ namespace Bvw {
 			// @todo
 			//   this.player.missing_plugins_setup ();
 			//   this.bacon_resize = new Bvw.Resize (this);
-    }
+		}
 
 		public override void unrealize () {
 			// @todo
@@ -300,12 +300,13 @@ namespace Bvw {
 			window = Gdk.x11_drawable_get_xid (this.window);
 			this.player.set_xwindow_id (window);
 
-      // start with a nice black canvas
+			// start with a nice black canvas
 			this.window.draw_rectangle (this.style.black_gc, true, 0, 0,
 										this.allocation.width,
 										this.allocation.height);
 
-			// if there's only audio and no visualisation, draw the logo as well
+			// if there's only audio and no visualisation,
+			// draw the logo as well
 			draw_logo = this.player.has_audio
 			&& !this.player.has_video
 			&& !this.player.show_vfx;

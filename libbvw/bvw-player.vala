@@ -1,6 +1,6 @@
 /* bvw-player.vala
  *
- * Copyright (C) 2008 Víctor Jáquez
+ * Copyright (C) 2008 Víctor Jáquez <vjaquez@igalia.com>
  *
  * License Header
  *
@@ -51,6 +51,23 @@ namespace Bvw {
 		LARGE,
 		EXTRA_LARGE,
 		NUM_QUALITIES
+	}
+
+	public enum AudioOutType {
+		STEREO,
+		CHANNEL4,
+		CHANNEL41,
+		CHANNEL5,
+		CHANNEL51,
+		AC3PASSTHRU
+	}
+
+	public enum AspectRatio {
+		AUTO = 0,
+		SQUARE = 1,
+		FOURBYTHREE = 2,
+		ANAMORPHIC = 3,
+		DVB = 4
 	}
 
 	public const int SMALL_STREAM_WIDTH = 200;
