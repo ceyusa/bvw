@@ -32,6 +32,7 @@ PKG_CHECK_MODULES([GST], [
 	gstreamer-base-0.10 >= $GST_REQS
 	gstreamer-plugins-base-0.10 >= $GSTPLUG_REQS
 	gstreamer-pbutils-0.10 >= $GST_REQS 
+	gstreamer-audio-0.10 >= $GST_REQS
 	gconf-2.0])
 
 PKG_CHECK_MODULES([GTK], [
