@@ -57,8 +57,6 @@ namespace Bvw {
 
 		private string media_device = null;
 
-		private int speakersetup;
-
 		private static weak GLib.Thread gui_thread;
 
 		construct {
@@ -82,16 +80,10 @@ namespace Bvw {
 			try {
 				GConf.Value confvalue = this.gc.get_without_default ("/apps/bvw/audio_output_type");
 				if (type != Bvw.UseType.METADATA && type != Bvw.UseType.CAPTURE) {
-					this.speakersetup = confvalue.get_int ();
-// TODO:					this.set_audio_type (this.speakersetup);
-				} else if (type == Bvw.UseType.METADATA || type == Bvw.UseType.CAPTURE) {
-					this.speakersetup = -1;
-				} else {
-					// don't set up a filter for the speaker setup, anything is fine
-					this.speakersetup = -1;
-// TODO:					this.set_audio_type (Bvw.AudioSound.STEREO);
+					this.audio_out_type = (Bvw.AudioOutType) confvalue.get_int ();
 				}
-			} finally {
+			} catch {
+				this.audio_out_type = Bvw.AudioOutType.STEREO;
 			}
 
 			// tv/conn (not used yet)
@@ -508,6 +500,92 @@ namespace Bvw {
 		public double volume { get; set; }
 
 		public int connection_speed { get; set; }
+
+		private AudioOutType speakersetup = Bvw.AudioOutType.UNDEF;
+		public AudioOutType audio_out_type {
+			get { return this.speakersetup; }
+			set {
+				if (value == this.speakersetup)
+					return;
+				else if (value == Bvw.AudioOutType.AC3PASSTHRU)
+					return;
+
+				this.speakersetup = value;
+				this.gc.set_int ("/apps/bvw/audio_output_type", value);
+
+				this.set_audio_filter ();
+			}
+		}
+
+		private int get_num_audio_channels () {
+			int channels;
+
+			switch (this.speakersetup) {
+			case Bvw.AudioOutType.STEREO:
+				channels = 2;
+				break;
+			case Bvw.AudioOutType.CHANNEL4:
+				channels = 4;
+				break;
+			case Bvw.AudioOutType.CHANNEL5:
+				channels = 5;
+				break;
+			case Bvw.AudioOutType.CHANNEL41:
+				// So alsa has this as 5.1 but empty center speaker.
+				// We don't really do that yet. ;-). So we'll take the
+				// placebo approach.
+			case Bvw.AudioOutType.CHANNEL51:
+				channels = 6;
+				break;
+			case Bvw.AudioOutType.AC3PASSTHRU:
+			default:
+				GLib.return_val_if_reached (-1);
+			}
+
+			return channels;
+		}
+
+		private Gst.Caps fixate_to_num (Gst.Caps in_caps, int channels) {
+			Gst.Structure s;
+
+			Gst.Caps out_caps = in_caps.copy ();
+			uint count = out_caps.get_size ();
+			for (uint n = 0; n < count; n++) {
+				s = out_caps.get_structure (n);
+				if (s.get_value ("channels") == null)
+					continue;
+
+				// get_channel cout (or list of ~)
+				s.fixate_field_nearest_int ("channels", channels);
+			}
+
+			return out_caps;
+		}
+
+		private void set_audio_filter () {
+			// reset old
+			this.audio_capsfilter.set ("caps", null);
+
+			// construct possible caps to filter down to our chosen caps.
+			// Start with what the audio sink supports, but limit the allowed
+			// channel count to our speaker output configuration.
+			Gst.Caps caps = this.audio_capsfilter.get_pad ("src").get_caps ();
+
+			int channels = this.get_num_audio_channels ();
+			if (channels == -1)
+				return;
+
+			Gst.Caps res = this.fixate_to_num (caps, channels);
+
+			if (res != null && res.is_empty ()) {
+				res = null;
+			}
+
+			this.audio_capsfilter.set ("caps", res);
+
+			// reset
+			this.audio_capsfilter.get_pad ("src").set_caps (null);
+		}
 
 		private void bus_message_cb (Gst.Bus bus, Gst.Message message) {
 			if ((this.ignore_messages_mask & message.type) != 0) {

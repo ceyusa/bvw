@@ -54,7 +54,8 @@ namespace Bvw {
 	}
 
 	public enum AudioOutType {
-		STEREO,
+		UNDEF = -1,
+		STEREO = 0,
 		CHANNEL4,
 		CHANNEL41,
 		CHANNEL5,
@@ -117,6 +118,7 @@ namespace Bvw {
 
 		// Properties
 		public abstract int connection_speed { get; set; }
+		public abstract AudioOutType audio_out_type { get; set; }
 
 		// Signals
 		public signal void error (string message,
