@@ -36,6 +36,11 @@ namespace Bvw {
 	}
 
 	public class PlayerGst: GLib.Object, Player {
+		Gst.XOverlay xoverlay = null;    // protect with lock
+		Gst.ColorBalance balance = null; // protect with lock
+		uint col_update_id = 0;          // protect with lock
+		GLib.Mutex @lock;
+
 		private string mrl = null;
 		private bool got_redirect;
 		private Gst.MessageType ignore_messages_mask;
@@ -97,19 +102,30 @@ namespace Bvw {
 			}
 
 			try {
-				GConf.Value confvalue = this.gc.get_without_default ("/apps/bvw/buffer-size");
-				this._play.set ("queue-size", Gst.SECOND * confvalue.get_float ());
+				GConf.Value confvalue = this.gc.get_without_default
+				("/apps/bvw/buffer-size");
+				this._play.set ("queue-size",
+								Gst.SECOND * confvalue.get_float ());
 			} finally {
 			}
 
 			try {
-				GConf.Value confvalue = this.gc.get_without_default ("/app/bvw/network-buffer-threshold");
-				this._play.set ("queue-threshold", Gst.SECOND * confvalue.get_float ());
+				GConf.Value confvalue = this.gc.get_without_default
+				("/app/bvw/network-buffer-threshold");
+				this._play.set ("queue-threshold",
+								Gst.SECOND * confvalue.get_float ());
 			} finally {
 			}
 
 			// assume we're always called from te main Gtk+ GUI thread
 			this.gui_thread = GLib.Thread.self ();
+		}
+
+		~PlayerGst () {
+			if (this.col_update_id != 0) {
+				GLib.Source.remove (this.col_update_id);
+				this.col_update_id = 0;
+			}
 		}
 
 		private void missing_plugins_blacklist () {
@@ -123,6 +139,205 @@ namespace Bvw {
 				if (feature != null) {
 					feature.set_rank (Gst.Rank.NONE);
 				}
+			}
+		}
+
+		private Gst.ColorBalanceChannel? get_color_balance_channel (Bvw.VideoProperty type) {
+			unowned GLib.List<Gst.ColorBalanceChannel> channels =
+			this.balance.list_channels ();
+
+			foreach (Gst.ColorBalanceChannel c in channels) {
+				if (type == Bvw.VideoProperty.BRIGHTNESS
+					&& c.label == "BRIGHTNESS")
+					return c;
+				else if (type == Bvw.VideoProperty.CONTRAST
+						 && c.label == "CONTRAST")
+					return c;
+				else if (type == Bvw.VideoProperty.SATURATION
+						 && c.label == "SATURATION")
+					return c;
+				else if (type == Bvw.VideoProperty.HUE
+						 && c.label == "HUE")
+					return c;
+			}
+
+			return null;
+		}
+
+		public int get_video_property (Bvw.VideoProperty type) {
+			this.lock.lock ();
+
+			int ret = 0;
+
+			if (this.balance != null
+				&& this.balance is Gst.ColorBalance) {
+				Gst.ColorBalanceChannel found_channel =
+					this.get_color_balance_channel (type);
+				if (found_channel != null
+					&& found_channel is Gst.ColorBalanceChannel) {
+					int cur = this.balance.get_value (found_channel);
+					this.logger.debug ("channel %s: cur=%d, min=%d, max=%d",
+									   found_channel.label, cur,
+									   found_channel.min_value,
+									   found_channel.max_value);
+					ret = (int) GLib.Math.floor (0.5 +
+												 ((double) cur - found_channel.min_value) * 65535 /
+												 ((double) found_channel.max_value - found_channel.min_value));
+					this.logger.debug ("channel %s: returning value %d",
+									   found_channel.label, ret);
+
+					this.lock.unlock ();
+					return ret;
+				} else {
+					ret = -1;
+				}
+			}
+
+			if (ret == 0) {
+				try {
+					ret = this.gc.get_int (video_props[type]);
+				} finally {
+					this.logger.debug ("nothing found for type %d, returning value %d from gconf key %s",
+									   type, ret, video_props[type]);
+				}
+			}
+
+			this.lock.unlock ();
+			return ret;
+		}
+
+		public void set_video_property (Bvw.VideoProperty type, int value) {
+			this.logger.debug ("set video property type %d to value %d",
+							   type, value);
+
+			if (!(value <= 65535 && value >= 0))
+				return;
+
+			if (this.balance != null
+				&& this.balance is Gst.ColorBalance) {
+				Gst.ColorBalanceChannel found_channel = this.get_color_balance_channel (type);
+				if (found_channel != null
+					&& found_channel is Gst.ColorBalanceChannel) {
+					int i_value;
+
+					i_value = (int) GLib.Math.floor (0.5 + value * ((double) (found_channel.max_value - found_channel.min_value) / 65535 + found_channel.min_value));
+
+					this.logger.debug ("channel %s: set to %d/65535",
+									   found_channel.label, value);
+
+					this.balance.set_value (found_channel, i_value);
+
+					this.logger.debug ("channel %s: val=%d, min=%d, max=%d",
+									   found_channel.label, i_value,
+									   found_channel.min_value,
+									   found_channel.max_value);
+				}
+			}
+
+			try {
+				this.gc.set_int (video_props[type], value);
+			} finally {
+				this.logger.debug ("setting value %d on gconf key %s",
+								   value, video_props[type]);
+			}
+		}
+
+		private const string[] video_props = {
+			"/app/bvw/brightness",
+			"/app/bvw/contrast",
+			"/app/bvw/saturation",
+			"/app/bvw/hue"
+		};
+
+		private bool update_brightness_and_contrast () {
+			GLib.return_val_if_fail (GLib.Thread.self () == this.gui_thread,
+									 false);
+
+			// Setup brightness and contrast
+			this.logger.log ("updating brightness and contrast from GConf settings");
+			for (uint i = 0; i < video_props.length; i++) {
+				try {
+					GConf.Value confvalue =
+						this.gc.get_without_default (video_props[i]);
+					this.set_video_property ((Bvw.VideoProperty) i,
+											 confvalue.get_int ());
+				} finally {
+				}
+
+			}
+
+			return false;
+		}
+
+		private bool find_colorbalance_element (void* item, Gst.Value ret) {
+			Gst.Element element = (Gst.Element) item;
+			this.logger.debug ("Checking element %s ...", element.get_name ());
+
+			if (!(element is Gst.ColorBalance))
+				return true;
+
+			this.logger.debug ("Element %s is a color balance",
+							   element.get_name ());
+			// TODO: howto find the GstColorBalanceType in this interface?
+			// if (GST_COLOR_BALANCE_TYPE (GST_COLOR_BALANCE_GET_CLASS (element)) == GST_COLOR_BALANCE_HARDWARE)
+			this.balance = (Gst.ColorBalance) element;
+			return false;
+		}
+
+		private void update_interface_implementations () {
+			Gst.Element video_sink = null;
+			Gst.Element element;
+
+			this._play.get ("video-sink", ref video_sink);
+			assert (video_sink != null);
+
+			// we tray to get an element supporting XOverlay interface
+			if (video_sink is Gst.Bin) {
+				this.logger.debug ("Retrieving xoverlay from bin ...");
+				element = ((Gst.Bin) video_sink).get_by_interface (typeof (Gst.XOverlay));
+			} else {
+				element = video_sink;
+			}
+
+			if (video_sink is Gst.XOverlay) {
+				this.logger.debug ("Found xoverlay: %s", video_sink.get_name ());
+				this.xoverlay = (Gst.XOverlay) element;
+			} else {
+				this.logger.debug ("No xoverlay found");
+				this.xoverlay = null;
+			}
+
+			// Find best color balance element (using custom iterator so
+			// we can prefer hardware implementations to software ones)
+
+			// FIXME: this doesn't work reliably yet, must of the time
+			// the fold function doesn't even get called, while sometimes
+			// it does...
+			Gst.Iterator iter = ((Gst.Bin) this._play).iterate_all_by_interface (typeof (Gst.ColorBalance));
+
+			Gst.Value value = Gst.Value ();
+			iter.fold (find_colorbalance_element, value);
+
+			if (this.balance == null && this.xoverlay is Gst.ColorBalance) {
+				this.balance = this.xoverlay as Gst.ColorBalance;
+				this.logger.debug ("Colorbalance backup found: %s",
+								   this.balance.get_name ());
+			} else {
+				this.logger.debug ("No colorbalance found");
+			}
+
+			// Setup brightness and contrast from configured values (do it
+			// delayed if we're within a stream thread, otherwise gconf/orbit/
+			// whatever may iterate or otherwise mess with the default main
+			// context and cause all kind of nasty issues)
+			if (GLib.Thread.self () == this.gui_thread) {
+				this.update_brightness_and_contrast ();
+			} else {
+				// caller will have acquired this.lock already
+				if (this.col_update_id != 0)
+					GLib.Source.remove (this.col_update_id);
+
+				this.col_update_id = GLib.Idle.add (this.update_brightness_and_contrast);
 			}
 		}
 
@@ -299,8 +514,9 @@ namespace Bvw {
 					 "Selector.");
 			}
 
-			// set back to NULL to close device again in order to avoid interrupts
-			// being generated after startup while there's nothing to play yet.
+			// set back to NULL to close device again in order to avoid
+			// interrupts being generated after startup while there's nothing
+			// to play yet.
 			audio_sink.set_state (Gst.State.NULL);
 
 			do {
@@ -333,7 +549,7 @@ namespace Bvw {
 						 "Please select another video output in the Multimedia Systems Selector.");
 				}
 
-// TODO:				this.update_interface_implementations ();
+				this.update_interface_implementations ();
 			}
 
 			// we want to catch "prepare-xwindow-id" element messages synchronously
@@ -718,7 +934,7 @@ namespace Bvw {
 // 				this.videotags = null;
 
 			GLib.Object source = null;
-			play.get ("source", source, null);
+			play.get ("source", ref source);
 
 			if (source != null) {
 				this.logger.debug ("Got source of type %s", source.get_type ().name ());

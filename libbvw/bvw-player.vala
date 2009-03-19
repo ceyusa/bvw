@@ -63,6 +63,13 @@ namespace Bvw {
 		AC3PASSTHRU
 	}
 
+	public enum VideoProperty {
+		BRIGHTNESS,
+		CONTRAST,
+		SATURATION,
+		HUE
+	}
+
 	public enum AspectRatio {
 		AUTO = 0,
 		SQUARE = 1,
@@ -127,5 +134,10 @@ namespace Bvw {
 		public signal void tick (int64 current_time, int64 stream_length,
 								 double current_position, bool seekable);
 		public signal void buffering (uint progress);
+
+		// Picture settings
+		public abstract void set_video_property (Bvw.VideoProperty type,
+												 int value);
+		public abstract int get_video_property (Bvw.VideoProperty type);
 	}
 }
