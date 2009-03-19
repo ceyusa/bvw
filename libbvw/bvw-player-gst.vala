@@ -66,8 +66,6 @@ namespace Bvw {
 		}
 
 		public PlayerGst (int width, int height, UseType type) throws Error {
-			this.connection_speed = 11;
-
 			this.missing_plugins_blacklist ();
 
 			// gconf setting in backend
@@ -78,9 +76,12 @@ namespace Bvw {
 
 			// audio out, if any
 			try {
-				GConf.Value confvalue = this.gc.get_without_default ("/apps/bvw/audio_output_type");
-				if (type != Bvw.UseType.METADATA && type != Bvw.UseType.CAPTURE) {
-					this.audio_out_type = (Bvw.AudioOutType) confvalue.get_int ();
+				GConf.Value confvalue = this.gc.get_without_default
+				("/apps/bvw/audio_output_type");
+				if (type != Bvw.UseType.METADATA
+					&& type != Bvw.UseType.CAPTURE) {
+					this.audio_out_type =
+					(Bvw.AudioOutType) confvalue.get_int ();
 				}
 			} catch {
 				this.audio_out_type = Bvw.AudioOutType.STEREO;
@@ -88,10 +89,11 @@ namespace Bvw {
 
 			// tv/conn (not used yet)
 			try {
-				GConf.Value confvalue = this.gc.get_without_default ("/apps/bvw/connection_speed");
-// TODO:				this.set_connection_speed (confvalue.get_int ());
+				GConf.Value confvalue = this.gc.get_without_default
+				("/apps/bvw/connection_speed");
+				this.connection_speed = confvalue.get_int ();
 			} catch (GLib.Error err) {
-// TODO:				this.set_connection_speed (this.connection_speed);
+				this.connection_speed = this._connection_speed;
 			}
 
 			try {
@@ -499,7 +501,36 @@ namespace Bvw {
 
 		public double volume { get; set; }
 
-		public int connection_speed { get; set; }
+		private int _connection_speed = 11;
+		public int connection_speed {
+			get { return _connection_speed; }
+			set {
+				if (value != this._connection_speed) {
+					this._connection_speed = value;
+					this.gc.set_int ("/apps/bvw/connection_speed", value);
+				}
+
+				if (this._play != null
+					&& ((ObjectClass) this._play.get_type ().class_peek ()).find_property ("connection-speed") != null) {
+					uint kbps = this.connection_speed_enum_to_kbps (value);
+
+					this.logger.log ("Setting connection speed %d (= %d kbps)", value, kbps);
+					this._play.set ("connection-speed", kbps);
+				}
+			}
+		}
+
+		private const uint[] speed_table = { 14400, 19200, 28800, 33600,
+											 34400, 56000, 112000, 256000,
+											 384000, 512000, 1536000, 10752000 };
+
+		private uint connection_speed_enum_to_kbps (int speed) {
+			GLib.return_val_if_fail (speed >= 0
+									 && (uint) speed < speed_table.length, 0);
+
+			return (speed_table[speed] / 1000)
+				+ (((speed_table[speed] % 1000) != 0) ? 1 : 0);
+		}
 
 		private AudioOutType speakersetup = Bvw.AudioOutType.UNDEF;
 		public AudioOutType audio_out_type {
