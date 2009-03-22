@@ -127,7 +127,6 @@ namespace Bvw {
 		public abstract AudioOutType audio_out_type { get; set; }
 		public abstract ulong xwindow_id { set; }
 
-
 		// Signals
 		public signal void error (string message,
 								  bool playback_stopped, bool fatal);
@@ -135,6 +134,9 @@ namespace Bvw {
 		public signal void tick (int64 current_time, int64 stream_length,
 								 double current_position, bool seekable);
 		public signal void buffering (uint progress);
+		public signal bool missing_plugins (string[] details,
+											string[] description,
+											bool playing);
 
 		// Picture settings
 		public abstract void set_video_property (Bvw.VideoProperty type,
