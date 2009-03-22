@@ -1059,8 +1059,20 @@ namespace Bvw {
   						&& e.code == Gst.CoreError.MISSING_PLUGIN)
   					   || (e.domain == Gst.stream_error_quark ()
   						   && e.code == Gst.StreamError.CODEC_NOT_FOUND)) {
-  				if (this.missing_plugins != null) {
-  					// TODO
+  				if (this.missing_plugins.length () > 0) {
+					string msg = null;
+					string[] descs = this.missing_plugins.get_descriptions ();
+					uint num = this.missing_plugins.length ();
+
+					if (e.domain == Gst.core_error_quark ()
+						&& e.code == Gst.CoreError.MISSING_PLUGIN) {
+						msg = "The playback of this movie requires a %s plugin which is not installed".printf (descs[0]);
+					} else {
+						string desc_list = string.joinv ("\n", descs);
+						msg = "The playback of this movie requires the following decodesr which are not installed: \n\n%s".printf (desc_list);
+					}
+
+					ret = new Error.CODEC_NOT_HANDLED (msg);
   				} else {
   					this.logger.log ("no missing plugin messages, " +
   									 "posting generic error");
