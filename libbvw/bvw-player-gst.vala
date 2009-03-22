@@ -604,7 +604,7 @@ namespace Bvw {
 				// create new ones when set to NULL state, and they are currently set
 				// to NULL state whenever playbin re-creates its internal video bin
 				// (it sets all elements to NULL state befor gst_bin_remove ()ing them)
-				this.video_sink.element_added += this.got_new_video_sink_bin_element;
+				((Gst.Bin) video_sink).element_added += this.got_new_video_sink_bin_element;
 			}
 		}
 
