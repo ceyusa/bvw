@@ -1196,7 +1196,6 @@ namespace Bvw {
   				if (this.missing_plugins.length () > 0) {
 					string msg = null;
 					string[] descs = this.missing_plugins.get_descriptions ();
-					uint num = this.missing_plugins.length ();
 
 					if (e.domain == Gst.core_error_quark ()
 						&& e.code == Gst.CoreError.MISSING_PLUGIN) {
