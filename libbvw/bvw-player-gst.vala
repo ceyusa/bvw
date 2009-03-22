@@ -75,6 +75,8 @@ namespace Bvw {
 
 		// Visual effects
 		private bool vis_changed;
+		private string vis_element_name = "goom";
+
 		private Gst.Element audio_capsfilter;
 
 		// other stuff
@@ -608,8 +610,140 @@ namespace Bvw {
 			}
 		}
 
-		// @todo
+		// TODO:
+		private void get_visualization_size (ref int w, ref int h,
+											 ref int fps_n, ref int fps_d) {
+		}
+
+		private bool filter_features (Gst.PluginFeature feature) {
+			if (!(feature is Gst.ElementFactory))
+				return false;
+			Gst.ElementFactory f = feature as Gst.ElementFactory;
+			if (f.get_klass ().str ("Visualization") != null)
+				return false;
+			return true;
+		}
+
+		private GLib.List<Gst.PluginFeature> get_visualization_features () {
+			return Gst.Registry.get_default ().feature_filter (this.filter_features, false);
+		}
+
+		private Gst.ElementFactory? setup_vis_find_factory (string vis_name) {
+			GLib.List<Gst.PluginFeature> features = this.get_visualization_features ();
+
+			foreach (Gst.PluginFeature feature in features) {
+				Gst.ElementFactory f = feature as Gst.ElementFactory;
+				if (f != null && vis_name == f.get_longname ()) {
+					return f;
+				}
+			}
+
+			// if nothing was found, try the short name (the default schema uses this)
+			foreach (Gst.PluginFeature feature in features) {
+				Gst.ElementFactory f = feature as Gst.ElementFactory;
+				if (f != null && vis_name == feature.name) {
+					this.gc.set_string ("/app/bvw/visual", f.get_longname ());
+					return f;
+				}
+			}
+
+			return null;
+		}
+
 		private void setup_vis () {
+			this.logger.debug ("setup_vis called, show_vfs %d, vis element %s",
+							   this.show_vfx, this.vis_element_name);
+
+			if (this.show_vfx && this.vis_element_name != null) {
+				Gst.ElementFactory fac = this.setup_vis_find_factory (this.vis_element_name);
+				if (fac == null) {
+					this.logger.debug ("Could not find element factory for visualization '%s'",
+									   this.vis_element_name);
+					// use goom as fallback, better than nothing
+					fac = this.setup_vis_find_factory ("goom");
+					if (fac == null) {
+						this._play.set ("vis-plugin", null);
+						return;
+					} else {
+						this.logger.debug ("Falling back on 'goom' for visualization");
+					}
+				}
+
+				Gst.Element vis_element = fac.create ("vis_element");
+				if (!(vis_element is Gst.Element)) {
+					this.logger.debug ("failed creating visualization element");
+					this._play.set ("vis-plugin", null);
+					return;
+				}
+
+				Gst.Element vis_capsfilter = Gst.ElementFactory.make ("capsfilter",
+																	  "vis_capsfilter");
+				if (!(vis_capsfilter is Gst.Element)) {
+					this.logger.debug ("failed creating visualization capsfilter element");
+					this._play.set ("vis-plugin", null);
+					return;
+				}
+
+				Gst.Element vis_bin = new Gst.Bin ("vis_bin");
+				if (!(vis_bin is Gst.Element)) {
+					this.logger.debug ("faild creating visualization bin");
+					this._play.set ("vis-plugin", null);
+					return;
+				}
+
+				((Gst.Bin) vis_bin).add_many (vis_element, vis_capsfilter);
+
+				// Sink ghostpad
+				{
+					Gst.Pad pad = vis_element.get_pad ("sink");
+					vis_bin.add_pad (new Gst.GhostPad ("sink", pad));
+				}
+
+				// Source ghostpad, link with vis_element
+				{
+					Gst.Pad pad = vis_capsfilter.get_pad ("src");
+					vis_bin.add_pad (new Gst.GhostPad ("src", pad));
+					vis_element.link_pads ("src", vis_capsfilter, "sink");
+				}
+
+				// Get allowed output caps from visualization element
+				{
+					Gst.Pad pad = vis_element.get_pad ("src");
+					Gst.Caps caps = pad.get_allowed_caps ();
+
+					this.logger.debug ("allowed caps: %p", caps);
+
+					// Can we fixate?
+					if (caps != null && !caps.is_fixed ()) {
+						// Get visualization size
+						int w = 0, h = 0, fps_n = 0, fps_d = 0;
+						this.get_visualization_size (ref w, ref h,
+													 ref fps_n, ref fps_d);
+
+						caps.make_writable ();
+						for (int i = 0; i < caps.get_size (); i++) {
+							Gst.Structure s = caps.get_structure (i);
+
+							// Fixate
+							s.fixate_field_nearest_int ("width", w);
+							s.fixate_field_nearest_int ("height", h);
+							s.fixate_field_nearest_fraction ("framerate",
+															 fps_n, fps_d);
+						}
+
+						// set this
+						vis_capsfilter.set ("caps", caps);
+					}
+
+					this.logger.debug ("visualization caps: %p", caps);
+				}
+
+				this._play.set ("vis-plugin", vis_bin);
+				return;
+			}
+
+			this._play.set ("vis-plugin", null);
+			return;
 		}
 
 		public bool open (string mrl) throws Error {
