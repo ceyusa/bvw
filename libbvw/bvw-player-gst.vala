@@ -122,6 +122,10 @@ namespace Bvw {
 		}
 
 		~PlayerGst () {
+			if (this.bus != null) {
+				this.bus.set_flushing (true);
+				this.bus.sync_message["element"] -= this.element_msg_sync;
+			}
 			if (this.col_update_id != 0) {
 				GLib.Source.remove (this.col_update_id);
 				this.col_update_id = 0;
@@ -341,6 +345,26 @@ namespace Bvw {
 			}
 		}
 
+		private void element_msg_sync (Gst.Bus bus, Gst.Message msg) {
+			assert (msg.type == Gst.MessageType.ELEMENT);
+
+			if (msg.structure == null)
+				return;
+
+			if (msg.structure.has_name ("prepare-xwindow-id")) {
+				this.logger.debug ("Handling sync prepare-xwindow-id message");
+
+				this.lock.lock ();
+				this.update_interface_implementations ();
+				this.lock.unlock ();
+
+				GLib.return_if_fail (this.xoverlay != null);
+				GLib.return_if_fail (this._xid != -1);
+
+				this.xoverlay.set_xwindow_id (this._xid);
+			}
+		}
+
 		private void setup_pipeline (int width,
 									 int height,
 									 UseType type) throws Error {
@@ -555,7 +579,7 @@ namespace Bvw {
 			// we want to catch "prepare-xwindow-id" element messages synchronously
 			this.bus.set_sync_handler (this.bus.sync_signal_handler);
 
-// TODO:			this.bus.sync-message["element"] += this.element_msg_sync;
+			this.bus.sync_message["element"] += this.element_msg_sync;
 
 			if (video_sink is Gst.Bin) {
 				// video sink bins like gconfvideosink might remove their children and
