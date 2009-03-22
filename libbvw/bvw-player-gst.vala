@@ -365,6 +365,13 @@ namespace Bvw {
 			}
 		}
 
+		private void got_new_video_sink_bin_element (Gst.Bin video_sink,
+													 Gst.Element element) {
+			this.lock.lock ();
+			this.update_interface_implementations ();
+			this.lock.unlock ();
+		}
+
 		private void setup_pipeline (int width,
 									 int height,
 									 UseType type) throws Error {
@@ -586,7 +593,7 @@ namespace Bvw {
 				// create new ones when set to NULL state, and they are currently set
 				// to NULL state whenever playbin re-creates its internal video bin
 				// (it sets all elements to NULL state befor gst_bin_remove ()ing them)
-// TODO:				this.video_sink.element-added += this.got_new_video_sink_bin_element;
+				this.video_sink.element_added += this.got_new_video_sink_bin_element;
 			}
 		}
 
