@@ -11,7 +11,10 @@ using GConf;
 
 namespace Bvw {
 	private class MissingPlugins : GLib.Object {
+		// list of Gst.Messages
 		public GLib.List<Gst.Message> list = new GLib.List<Gst.Message> ();
+
+		private const string[] blacklisted_elements = { "ffdemux_flv" };
 
 		delegate string MsgToStrFunc (Gst.Message msg);
 
@@ -33,6 +36,27 @@ namespace Bvw {
 		public string[] get_descriptions () {
 			return get_foo (Gst.missing_plugin_message_get_description);
 		}
+
+		public uint length () {
+			return list.length ();
+		}
+
+		public void add (Gst.Message msg) {
+			list.prepend (msg);
+		}
+
+		public void blacklist () {
+			foreach (string element in blacklisted_elements) {
+				Gst.PluginFeature feature =
+				Gst.Registry.get_default ().find_feature
+				(element, typeof (Gst.ElementFactory));
+
+				if (feature != null) {
+					feature.set_rank (Gst.Rank.NONE);
+				}
+			}
+		}
+
 	}
 
 	public class PlayerGst: GLib.Object, Player {
@@ -57,7 +81,7 @@ namespace Bvw {
 		private bool uses_fakesink = false;
 
 		// for easy codec installation
-		private MissingPlugins missing_plugins = null; // list of Gst.Messages
+		private MissingPlugins missing_plugins;
 		private bool plugin_install_in_progress = false;
 
 		private string media_device = null;
@@ -71,7 +95,8 @@ namespace Bvw {
 		}
 
 		public PlayerGst (int width, int height, UseType type) throws Error {
-			this.missing_plugins_blacklist ();
+			this.missing_plugins = new MissingPlugins ();
+			this.missing_plugins.blacklist ();
 
 			// gconf setting in backend
 			this.gc = GConf.Client.get_default ();
@@ -129,20 +154,6 @@ namespace Bvw {
 			if (this.col_update_id != 0) {
 				GLib.Source.remove (this.col_update_id);
 				this.col_update_id = 0;
-			}
-		}
-
-		private void missing_plugins_blacklist () {
-			string[] blacklisted_elements = { "ffdemux_flv" };
-
-			foreach (string element in blacklisted_elements) {
-				Gst.PluginFeature feature =
-				Gst.Registry.get_default ().find_feature
-				(element, typeof (Gst.ElementFactory));
-
-				if (feature != null) {
-					feature.set_rank (Gst.Rank.NONE);
-				}
 			}
 		}
 
