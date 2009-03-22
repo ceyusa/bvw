@@ -110,7 +110,6 @@ namespace Bvw {
 		// update_interface_implementation (finds gst interfaces)
 		// bacon-video-widtet-gst-0.10.c:bacon_video_widget_expose_event:657
 		public abstract void x_overlay_update ();
-		public abstract void set_xwindow_id (ulong xwindow_id);
 		// returns true if there's a GstNavigation interface
 		// bacon-video-widtet-gst-0.10.c:bacon_video_widget_motion_notify:774
 		public abstract bool set_mouse_event (string event, int button,
@@ -126,6 +125,8 @@ namespace Bvw {
 		// Properties
 		public abstract int connection_speed { get; set; }
 		public abstract AudioOutType audio_out_type { get; set; }
+		public abstract ulong xwindow_id { set; }
+
 
 		// Signals
 		public signal void error (string message,

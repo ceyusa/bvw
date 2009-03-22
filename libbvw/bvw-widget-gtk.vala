@@ -286,7 +286,6 @@ namespace Bvw {
 
 		public override bool expose_event (Gdk.EventExpose event) {
 			bool draw_logo;
-			uint32 window;
 
 			// fixme event != null
 			if (event.count > 0) {
@@ -297,8 +296,7 @@ namespace Bvw {
 			// find/update the xoverlay in the player
 			this.player.x_overlay_update ();
 
-			window = Gdk.x11_drawable_get_xid (this.window);
-			this.player.set_xwindow_id (window);
+			this.player.xwindow_id = Gdk.x11_drawable_get_xid (this.window);
 
 			// start with a nice black canvas
 			this.window.draw_rectangle (this.style.black_gc, true, 0, 0,

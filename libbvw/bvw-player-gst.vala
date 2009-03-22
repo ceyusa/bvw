@@ -694,9 +694,6 @@ namespace Bvw {
 		public void x_overlay_update () {
 		}
 
-		public void set_xwindow_id (ulong xwindow_id) {
-		}
-
 		public bool set_mouse_event (string event, int button,
 									 double x, double y) {
 			return true;
@@ -716,6 +713,25 @@ namespace Bvw {
 		}
 
 		public double volume { get; set; }
+
+		private ulong _xid = -1;
+		public ulong xwindow_id {
+			set {
+				if (value != _xid) {
+					_xid = value;
+
+					if (this.xoverlay == null) {
+						this.lock.lock ();
+						this.update_interface_implementations ();
+						this.lock.unlock ();
+
+						if (this.xoverlay != null
+							&& this.xoverlay is Gst.XOverlay)
+							this.xoverlay.set_xwindow_id (_xid);
+					}
+				}
+			}
+		}
 
 		private int _connection_speed = 11;
 		public int connection_speed {
