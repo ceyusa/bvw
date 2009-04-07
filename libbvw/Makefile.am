@@ -20,11 +20,12 @@ libbvw_1_0_la_VALASOURCES =	\
 libbvw_1_0_la_SOURCES = 			\
 	bvw.vala.stamp				\
 	$(libbvw_1_0_la_VALASOURCES:.vala=.c)	\
-	$(libbvw_1_0_la_VALASOURCES:.vala=.h)	\
 	$(NULL)
 
-bvwincludedir = $(includedir)/gdata-1.0/gdata
-bvwinclude_HEADERS = $(libbvw_1_0_la_VALASOURCES:.vala=.h)
+bvwincludedir = $(includedir)/bvw-1.0
+bvwinclude_HEADERS = 	\
+	libbvw-1.0.h	\
+	$(NULL)
 
 valac_common = 				\
 	--ccode				\
@@ -43,7 +44,10 @@ valac_common = 				\
 	$(NULL)
 
 bvw-1.0.vapi bvw.vala.stamp: $(libbvw_1_0_la_VALASOURCES)
-	$(VALAC) $(valac_common)  --library libbvw-1.0 $^
+	$(VALAC) $(valac_common)  	\
+	--library=libbvw-1.0 		\
+	--header=libbvw-1.0.h 		\
+	$^
 	touch $@
 
 libbvw_1_0_la_LIBADD =	\

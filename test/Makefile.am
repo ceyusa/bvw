@@ -20,7 +20,6 @@ test_VALASOURCES =	\
 test_SOURCES = 				\
 	test.vala.stamp			\
 	$(test_VALASOURCES:.vala=.c)	\
-	$(test_VALASOURCES:.vala=.h)	\
 	$(NULL)
 
 valac_common =				\
@@ -29,6 +28,7 @@ valac_common =				\
 	--vapidir ../libbvw		\
 	--pkg libbvw-1.0		\
 	--pkg gtk+-2.0			\
+	--pkg gstreamer-0.10		\
 	$(NULL)
 
 test.vala.stamp: $(test_VALASOURCES)
