@@ -32,6 +32,7 @@ namespace Bvw {
 
 		public WidgetGtk (Player player) {
 			this.player = player;
+			this.set_visible_window (true);
 		}
 
 		// Widget interface
@@ -188,27 +189,13 @@ namespace Bvw {
 			int attributes_mask, w, h;
 			Gdk.Color colour;
 
-			// Creating our widget's window
-			attributes.window_type = Gdk.WindowType.CHILD;
-			attributes.x = this.allocation.x;
-			attributes.y = this.allocation.y;
-			attributes.width = this.allocation.width;
-			attributes.height = this.allocation.height;
-			attributes.wclass = Gdk.WindowClass.INPUT_OUTPUT;
-			attributes.visual = this.get_visual ();
-			attributes.colormap = this.get_colormap ();
-			attributes.event_mask = this.get_events ();
-			attributes.event_mask |= Gdk.EventMask.EXPOSURE_MASK
+			int event_mask = this.get_events ()
 			| Gdk.EventMask.POINTER_MOTION_MASK
-			| Gdk.EventMask.BUTTON_PRESS_MASK
 			| Gdk.EventMask.KEY_PRESS_MASK;
-			attributes_mask = Gdk.WindowAttributesType.X
-			| Gdk.WindowAttributesType.Y
-			| Gdk.WindowAttributesType.VISUAL
-			| Gdk.WindowAttributesType.COLORMAP;
-			this.window = new Gdk.Window (this.get_parent_window (), attributes,
-										  attributes_mask);
-			this.window.set_user_data (this);
+
+			this.set_events (event_mask);
+
+			base.realize ();
 
 			// Creating our video window
 			attributes.window_type = Gdk.WindowType.CHILD;
