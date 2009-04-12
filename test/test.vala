@@ -30,7 +30,7 @@ public class PlayerTest {
 		  win.destroy += Gtk.main_quit;
 
 		  video_widget = new Bvw.WidgetGtk (player);
-		  video_widget.set_logo ("./youtube.gif");
+		  video_widget.set_logo ("./gnome_logo.gif");
 		  video_widget.logo_mode = true;
 
 		  win.add (video_widget as Gtk.Widget);
