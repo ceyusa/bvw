@@ -153,9 +153,25 @@ namespace Bvw {
 			return false;
 		}
 
+		private void setup_vis () {
+			this.player.setup_vis ();
+
+			if (this.player.has_audio && this.player.has_video
+				&& this.video_window != null) {
+				if (this.player.show_vfx) {
+					this.video_window.show ();
+					this.unset_flags (Gtk.WidgetFlags.DOUBLE_BUFFERED);
+				} else {
+					this.video_window.hide ();
+					this.set_flags (Gtk.WidgetFlags.DOUBLE_BUFFERED);
+				}
+
+				this.queue_draw ();
+			}
+		}
+
 		private void size_changed_cb (Gdk.Screen screen) {
-			// @todo
-			// this.setup_vis ();
+			this.setup_vis ();
 		}
 
 		private bool cb_unset_size () {

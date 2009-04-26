@@ -59,6 +59,16 @@ namespace Bvw {
 
 	}
 
+	private enum PlayFlags {
+		VIDEO         = (1 << 0),
+		AUDIO         = (1 << 1),
+		TEXT          = (1 << 2),
+		VIS           = (1 << 3),
+		SOFT_VOLUME   = (1 << 4),
+		NATIVE_AUDIO  = (1 << 5),
+		NATIVE_VIDEO  = (1 << 6)
+	}
+
 	public class PlayerGst: GLib.Object, Player {
 		Gst.XOverlay xoverlay = null;    // protect with lock
 		Gst.ColorBalance balance = null; // protect with lock
@@ -745,6 +755,20 @@ namespace Bvw {
 			this.vis_changed = false;
 
 			this._play.set ("vis-plugin", null);
+
+			if (this.has_audio && !this.has_video) {
+				int flags = 0;
+
+				this._play.get ("flags", ref flags);
+				if (this.show_vfx) {
+					flags |= PlayFlags.VIS;
+				} else {
+					int notvis = PlayFlags.VIS;
+					flags &= ~notvis;
+				}
+				this._play.set ("flags", flags);
+			}
+
 			return;
 		}
 
