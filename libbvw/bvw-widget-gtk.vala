@@ -281,8 +281,6 @@ namespace Bvw {
 
 			// @todo:
 			// find/update the xoverlay in the player
-			this.player.x_overlay_update ();
-
 			this.player.xwindow_id = Gdk.x11_drawable_get_xid (this.window);
 
 			// start with a nice black canvas

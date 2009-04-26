@@ -103,17 +103,18 @@ namespace Bvw {
 		// widget adapters
 		//
 		public abstract void get_media_size (out int width, out int height);
+
 		// returns true if there's a Xoverlay to expose
 		// bacon-video-widtet-gst-0.10.c:bacon_video_widget_configure_event:632
 		// bacon-video-widtet-gst-0.10.c:bacon_video_widget_expose_event:743
 		public abstract bool x_overlay_expose ();
-		// update_interface_implementation (finds gst interfaces)
-		// bacon-video-widtet-gst-0.10.c:bacon_video_widget_expose_event:657
-		public abstract void x_overlay_update ();
+
 		// returns true if there's a GstNavigation interface
 		// bacon-video-widtet-gst-0.10.c:bacon_video_widget_motion_notify:774
 		public abstract bool set_mouse_event (string event, int button,
 											  double x, double y);
+		public abstract void setup_vis ();
+
 		public abstract bool has_video { get; }
 		public abstract bool has_audio { get; }
 		public abstract bool show_vfx { get; }

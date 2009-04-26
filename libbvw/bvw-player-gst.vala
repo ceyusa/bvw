@@ -867,9 +867,6 @@ namespace Bvw {
 			return true;
 		}
 
-		public void x_overlay_update () {
-		}
-
 		public bool set_mouse_event (string event, int button,
 									 double x, double y) {
 			return true;
