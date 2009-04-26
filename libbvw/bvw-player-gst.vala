@@ -151,7 +151,7 @@ namespace Bvw {
 		~PlayerGst () {
 			if (this.bus != null) {
 				this.bus.set_flushing (true);
-				this.bus.sync_message["element"] -= this.element_msg_sync;
+				this.bus.sync_message["element"].disconnect (this.element_msg_sync);
 			}
 			if (this.col_update_id != 0) {
 				GLib.Source.remove (this.col_update_id);
@@ -403,7 +403,7 @@ namespace Bvw {
 
 			this.bus = this._play.get_bus ();
 			this.bus.add_signal_watch ();
-			this.bus.message += bus_message_cb;
+			this.bus.message.connect (this.bus_message_cb);
 
 			if (type == Bvw.UseType.VIDEO || type == Bvw.UseType.AUDIO) {
 				audio_sink = Gst.ElementFactory.make ("gconfaudiosink",
@@ -581,8 +581,8 @@ namespace Bvw {
 			this._play.set ("audio-sink", audio_sink, null);
 
 			// this.vis_plugins_list = null;
-			this._play.notify["source"] += this.playbin_source_notify_cb;
-			this._play.notify["stream-info"] += this.playbin_stream_info_notify_cb;
+			this._play.notify["source"].connect (this.playbin_source_notify_cb);
+			this._play.notify["stream-info"].connect (this.playbin_stream_info_notify_cb);
 
 			if (type == Bvw.UseType.VIDEO) {
 				Gst.StateChangeReturn ret = video_sink.get_state (null, null, 5 * Gst.SECOND);
@@ -599,14 +599,14 @@ namespace Bvw {
 			// we want to catch "prepare-xwindow-id" element messages synchronously
 			this.bus.set_sync_handler (this.bus.sync_signal_handler);
 
-			this.bus.sync_message["element"] += this.element_msg_sync;
+			this.bus.sync_message["element"].connect (this.element_msg_sync);
 
 			if (video_sink is Gst.Bin) {
 				// video sink bins like gconfvideosink might remove their children and
 				// create new ones when set to NULL state, and they are currently set
 				// to NULL state whenever playbin re-creates its internal video bin
 				// (it sets all elements to NULL state befor gst_bin_remove ()ing them)
-				((Gst.Bin) video_sink).element_added += this.got_new_video_sink_bin_element;
+				((Gst.Bin) video_sink).element_added.connect (this.got_new_video_sink_bin_element);
 			}
 		}
 

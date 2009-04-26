@@ -168,7 +168,7 @@ namespace Bvw {
 			requisition.width = this.pref_size.width;
 			requisition.height = this.pref_size.height;
 
-			((Gtk.Widget) this).size_request -= this.cb_set_preferred_size;
+			this.size_request.disconnect (this.cb_set_preferred_size);
 
 			Idle.add (this.cb_unset_size);
 		}
@@ -179,7 +179,7 @@ namespace Bvw {
 			this.pref_size.width = width;
 			this.pref_size.height = height;
 
-			((Gtk.Widget) this).size_request += this.cb_set_preferred_size;
+			this.size_request.connect (this.cb_set_preferred_size);
 
 			this.queue_resize ();
 		}
@@ -223,10 +223,10 @@ namespace Bvw {
 			this.set_flags (Gtk.WidgetFlags.REALIZED);
 
 			// Connect to configure event on the top level window
-			this.get_toplevel ().configure_event += this.configure_event;
+			this.get_toplevel ().configure_event.connect (this.configure_event);
 
 			// get screen size changes
-			this.get_screen ().size_changed += this.size_changed_cb;
+			this.get_screen ().size_changed.connect (this.size_changed_cb);
 
 			// nice hack to show the logo fullsize, while still being resizable
 			this.get_media_size (out w, out h);
