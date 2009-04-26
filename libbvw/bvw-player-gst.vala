@@ -650,7 +650,7 @@ namespace Bvw {
 			return null;
 		}
 
-		private void setup_vis () {
+		public void setup_vis () {
 			this.logger.debug ("setup_vis called, show_vfs %d, vis element %s",
 							   this.show_vfx, this.vis_element_name);
 
@@ -741,6 +741,8 @@ namespace Bvw {
 				this._play.set ("vis-plugin", vis_bin);
 				return;
 			}
+
+			this.vis_changed = false;
 
 			this._play.set ("vis-plugin", null);
 			return;

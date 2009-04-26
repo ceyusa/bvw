@@ -90,7 +90,7 @@ namespace Bvw {
 		public abstract void stop ();
 		public abstract void close ();
 
-		// Seeking and lenght
+		// Seeking and length
 		public abstract bool seekable { get; set; }
 		public abstract bool seek (double position) throws Error;
 		public abstract bool seek_time (int64 time) throws Error;
